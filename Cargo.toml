@@ -6,4 +6,4 @@ incremental = true
 debug = true
 
 [patch.'crates-io']
-salsa = { git = "https://github.com/matklad/salsa", branch = "strong-panic-safety" }
+salsa = { path = "../salsa" }
