@@ -8,7 +8,7 @@ use ra_syntax::ast;
 
 use crate::{
     Function, Module, Struct, Union, Enum, Const, Static, Trait, TypeAlias, MacroDef,
-    DefDatabase, HirFileId, Name, Path, AstDatabase,
+    DefDatabase, HirFileId, Name, Path, AstDatabase, ImplBlock,
     KnownName,
     nameres::{
         Resolution, PerNs, ModuleDef, ReachedFixedPoint, ResolveMode,
@@ -17,6 +17,7 @@ use crate::{
         raw,
     },
     ids::{AstItemDef, LocationCtx, MacroCallLoc, MacroCallId, MacroDefId, MacroFileKind},
+    impl_block::{ImplData, ImplItem},
     AstId,
 };
 
@@ -486,9 +487,7 @@ where
                 )),
                 raw::RawItem::Def(def) => self.define_def(&self.raw_items[def]),
                 raw::RawItem::Macro(mac) => self.collect_macro(&self.raw_items[mac]),
-                raw::RawItem::Impl(impl_block) => {
-                    // ???
-                }
+                raw::RawItem::Impl(impl_block) => self.collect_impl(&self.raw_items[impl_block]),
             }
         }
     }
@@ -558,8 +557,7 @@ where
     }
 
     fn define_def(&mut self, def: &raw::DefData) {
-        let module = Module { krate: self.def_collector.def_map.krate, module_id: self.module_id };
-        let ctx = LocationCtx::new(self.def_collector.db, module, self.file_id.into());
+        let ctx = self.location_ctx();
 
         macro_rules! def {
             ($kind:ident, $ast_id:ident) => {
@@ -613,6 +611,47 @@ where
 
         // Case 3: path to a macro from another crate, expand during name resolution
         self.def_collector.unexpanded_macros.push((self.module_id, ast_id, mac.path.clone()))
+    }
+
+    fn collect_impl(&mut self, impl_data: &raw::ImplData) {
+        let ctx = self.location_ctx();
+        macro_rules! def {
+            ($kind:ident, $ast_id:ident) => {
+                ImplItem::from($kind { id: AstItemDef::from_ast_id(ctx, $ast_id) })
+            };
+        }
+
+        let items = impl_data
+            .items
+            .iter()
+            .map(|kind| match *kind {
+                raw::DefKind::Function(ast_id) => def!(Function, ast_id),
+                raw::DefKind::Const(ast_id) => def!(Const, ast_id),
+                raw::DefKind::TypeAlias(ast_id) => def!(TypeAlias, ast_id),
+                raw::DefKind::Struct(..)
+                | raw::DefKind::Union(..)
+                | raw::DefKind::Enum(..)
+                | raw::DefKind::Static(..)
+                | raw::DefKind::Trait(..) => unreachable!(),
+            })
+            .collect::<Vec<_>>();
+        let impl_block = ImplBlock { impl_id: AstItemDef::from_ast_id(ctx, impl_data.impl_id) };
+        self.def_collector.def_map.modules[self.module_id]
+            .impls_by_def
+            .extend(items.iter().map(|&item| (item, impl_block)));
+        let impl_data = ImplData {
+            target_trait: impl_data.target_trait.clone(),
+            target_type: impl_data.target_type.clone(),
+            items,
+            negative: impl_data.negative,
+        };
+        let module_data = &mut self.def_collector.def_map.modules[self.module_id];
+        module_data.impls.insert(impl_block, impl_data);
+    }
+
+    fn location_ctx(&self) -> LocationCtx<&DB> {
+        let module = Module { krate: self.def_collector.def_map.krate, module_id: self.module_id };
+        LocationCtx::new(self.def_collector.db, module, self.file_id.into())
     }
 }
 

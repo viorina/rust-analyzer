@@ -20,13 +20,14 @@ pub enum LangItemTarget {
 impl LangItemTarget {
     pub(crate) fn krate(&self, db: &impl HirDatabase) -> Option<Crate> {
         match self {
-            LangItemTarget::Enum(e) => e.module(db).krate(db),
-            LangItemTarget::Function(f) => f.module(db).krate(db),
-            LangItemTarget::ImplBlock(i) => i.module().krate(db),
-            LangItemTarget::Static(s) => s.module(db).krate(db),
-            LangItemTarget::Struct(s) => s.module(db).krate(db),
-            LangItemTarget::Trait(t) => t.module(db).krate(db),
+            LangItemTarget::Enum(e) => e.module(db),
+            LangItemTarget::Function(f) => f.module(db),
+            LangItemTarget::ImplBlock(i) => i.module(db),
+            LangItemTarget::Static(s) => s.module(db),
+            LangItemTarget::Struct(s) => s.module(db),
+            LangItemTarget::Trait(t) => t.module(db),
         }
+        .krate(db)
     }
 }
 
@@ -83,20 +84,19 @@ impl LangItems {
         module: &Module,
     ) {
         // Look for impl targets
-        let (impl_blocks, source_map) = db.impls_in_module_with_source_map(module.clone());
-        let source = module.definition_source(db).1;
-        for (impl_id, _) in impl_blocks.impls.iter() {
-            let impl_block = source_map.get(&source, impl_id);
-            let lang_item_name = impl_block
-                .attrs()
-                .filter_map(|a| a.as_key_value())
-                .filter(|(key, _)| key == "lang")
-                .map(|(_, val)| val)
-                .nth(0);
-            if let Some(lang_item_name) = lang_item_name {
-                let imp = ImplBlock::from_id(*module, impl_id);
-                self.items.entry(lang_item_name).or_insert(LangItemTarget::ImplBlock(imp));
-            }
+        for impl_block in module.impl_blocks(db) {
+            // TODO:
+            // let impl_block = source_map.get(&source, impl_id);
+            // let lang_item_name = impl_block
+            //     .attrs()
+            //     .filter_map(|a| a.as_key_value())
+            //     .filter(|(key, _)| key == "lang")
+            //     .map(|(_, val)| val)
+            //     .nth(0);
+            // if let Some(lang_item_name) = lang_item_name {
+            //     let imp = ImplBlock::from_id(*module, impl_id);
+            //     self.items.entry(lang_item_name).or_insert(LangItemTarget::ImplBlock(imp));
+            // }
         }
 
         // FIXME we should look for the other lang item targets (traits, structs, ...)

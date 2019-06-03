@@ -14,7 +14,7 @@ use crate::{
     nameres::{Namespace, ImportSourceMap, RawItems, CrateDefMap},
     ty::{InferenceResult, Ty, method_resolution::CrateImplBlocks, TypableDef, CallableDef, FnSig, TypeCtor, GenericPredicate, Substs},
     adt::{StructData, EnumData},
-    impl_block::{ModuleImplBlocks, ImplSourceMap, ImplBlock},
+    impl_block::ImplBlock,
     generics::{GenericParams, GenericDef},
     type_ref::TypeRef,
     traits::TraitData,
@@ -100,14 +100,14 @@ pub trait DefDatabase: SourceDatabase {
     #[salsa::invoke(CrateDefMap::crate_def_map_query)]
     fn crate_def_map(&self, krate: Crate) -> Arc<CrateDefMap>;
 
-    #[salsa::invoke(crate::impl_block::impls_in_module)]
-    fn impls_in_module(&self, module: Module) -> Arc<ModuleImplBlocks>;
+    // #[salsa::invoke(crate::impl_block::impls_in_module)]
+    // fn impls_in_module(&self, module: Module) -> Arc<ModuleImplBlocks>;
 
-    #[salsa::invoke(crate::impl_block::impls_in_module_with_source_map_query)]
-    fn impls_in_module_with_source_map(
-        &self,
-        module: Module,
-    ) -> (Arc<ModuleImplBlocks>, Arc<ImplSourceMap>);
+    // #[salsa::invoke(crate::impl_block::impls_in_module_with_source_map_query)]
+    // fn impls_in_module_with_source_map(
+    //     &self,
+    //     module: Module,
+    // ) -> (Arc<ModuleImplBlocks>, Arc<ImplSourceMap>);
 
     #[salsa::invoke(crate::generics::GenericParams::generic_params_query)]
     fn generic_params(&self, def: GenericDef) -> Arc<GenericParams>;
