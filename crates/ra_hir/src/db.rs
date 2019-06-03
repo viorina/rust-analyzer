@@ -67,6 +67,8 @@ pub trait DefDatabase: SourceDatabase {
     fn intern_trait(&self, loc: ids::ItemLoc<ast::TraitDef>) -> ids::TraitId;
     #[salsa::interned]
     fn intern_type_alias(&self, loc: ids::ItemLoc<ast::TypeAliasDef>) -> ids::TypeAliasId;
+    #[salsa::interned]
+    fn intern_impl(&self, loc: ids::ItemLoc<ast::ImplBlock>) -> ids::ImplId;
 
     // Interned IDs for Chalk integration
     #[salsa::interned]
