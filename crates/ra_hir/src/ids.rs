@@ -361,6 +361,18 @@ impl AstItemDef<ast::TypeAliasDef> for TypeAliasId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ImplId(salsa::InternId);
+impl_intern_key!(ImplId);
+impl AstItemDef<ast::ImplBlock> for ImplId {
+    fn intern(db: &impl DefDatabase, loc: ItemLoc<ast::ImplBlock>) -> Self {
+        db.intern_impl(loc)
+    }
+    fn lookup_intern(self, db: &impl DefDatabase) -> ItemLoc<ast::ImplBlock> {
+        db.lookup_intern_impl(self)
+    }
+}
+
 impl MacroCallId {
     pub fn debug_dump(&self, db: &impl AstDatabase) -> String {
         let loc = self.clone().loc(db);
