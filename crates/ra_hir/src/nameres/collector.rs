@@ -486,6 +486,9 @@ where
                 )),
                 raw::RawItem::Def(def) => self.define_def(&self.raw_items[def]),
                 raw::RawItem::Macro(mac) => self.collect_macro(&self.raw_items[mac]),
+                raw::RawItem::Impl(impl_block) => {
+                    // ???
+                }
             }
         }
     }
