@@ -8,9 +8,8 @@ use rustc_hash::FxHashMap;
 
 use crate::{
     HirDatabase, Module, Crate, Name, Function, Trait,
-    impl_block::{ImplId, ImplBlock, ImplItem},
+    impl_block::{ImplBlock, ImplItem},
     ty::{Ty, TypeCtor},
-    nameres::CrateModuleId,
     resolve::Resolver,
     traits::TraitItem,
     generics::HasGenericParams,
@@ -38,56 +37,38 @@ impl TyFingerprint {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CrateImplBlocks {
-    /// To make sense of the CrateModuleIds, we need the source root.
-    krate: Crate,
-    impls: FxHashMap<TyFingerprint, Vec<(CrateModuleId, ImplId)>>,
-    impls_by_trait: FxHashMap<Trait, Vec<(CrateModuleId, ImplId)>>,
+    impls: FxHashMap<TyFingerprint, Vec<ImplBlock>>,
+    impls_by_trait: FxHashMap<Trait, Vec<ImplBlock>>,
 }
 
 impl CrateImplBlocks {
     pub fn lookup_impl_blocks<'a>(&'a self, ty: &Ty) -> impl Iterator<Item = ImplBlock> + 'a {
         let fingerprint = TyFingerprint::for_impl(ty);
-        fingerprint.and_then(|f| self.impls.get(&f)).into_iter().flat_map(|i| i.iter()).map(
-            move |(module_id, impl_id)| {
-                let module = Module { krate: self.krate, module_id: *module_id };
-                ImplBlock::from_id(module, *impl_id)
-            },
-        )
+        fingerprint
+            .and_then(|f| self.impls.get(&f))
+            .into_iter()
+            .flat_map(|i| i.iter())
+            .map(|&it| it)
     }
 
     pub fn lookup_impl_blocks_for_trait<'a>(
         &'a self,
         tr: &Trait,
     ) -> impl Iterator<Item = ImplBlock> + 'a {
-        self.impls_by_trait.get(&tr).into_iter().flat_map(|i| i.iter()).map(
-            move |(module_id, impl_id)| {
-                let module = Module { krate: self.krate, module_id: *module_id };
-                ImplBlock::from_id(module, *impl_id)
-            },
-        )
+        self.impls_by_trait.get(&tr).into_iter().flat_map(|i| i.iter()).map(|&it| it)
     }
 
     fn collect_recursive(&mut self, db: &impl HirDatabase, module: &Module) {
-        let module_impl_blocks = db.impls_in_module(module.clone());
-
-        for (impl_id, _) in module_impl_blocks.impls.iter() {
-            let impl_block = ImplBlock::from_id(module_impl_blocks.module, impl_id);
-
+        for impl_block in module.impl_blocks(db) {
             let target_ty = impl_block.target_ty(db);
 
             if impl_block.target_trait(db).is_some() {
                 if let Some(tr) = impl_block.target_trait_ref(db) {
-                    self.impls_by_trait
-                        .entry(tr.trait_)
-                        .or_insert_with(Vec::new)
-                        .push((module.module_id, impl_id));
+                    self.impls_by_trait.entry(tr.trait_).or_insert_with(Vec::new).push(impl_block);
                 }
             } else {
                 if let Some(target_ty_fp) = TyFingerprint::for_impl(&target_ty) {
-                    self.impls
-                        .entry(target_ty_fp)
-                        .or_insert_with(Vec::new)
-                        .push((module.module_id, impl_id));
+                    self.impls.entry(target_ty_fp).or_insert_with(Vec::new).push(impl_block);
                 }
             }
         }
@@ -101,11 +82,8 @@ impl CrateImplBlocks {
         db: &impl HirDatabase,
         krate: Crate,
     ) -> Arc<CrateImplBlocks> {
-        let mut crate_impl_blocks = CrateImplBlocks {
-            krate,
-            impls: FxHashMap::default(),
-            impls_by_trait: FxHashMap::default(),
-        };
+        let mut crate_impl_blocks =
+            CrateImplBlocks { impls: FxHashMap::default(), impls_by_trait: FxHashMap::default() };
         if let Some(module) = krate.root_module(db) {
             crate_impl_blocks.collect_recursive(db, &module);
         }

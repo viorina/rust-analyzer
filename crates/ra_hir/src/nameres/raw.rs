@@ -117,6 +117,13 @@ impl Index<Macro> for RawItems {
     }
 }
 
+impl Index<ImplId> for RawItems {
+    type Output = ImplData;
+    fn index(&self, idx: ImplId) -> &ImplData {
+        &self.impls[idx]
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) enum RawItem {
     Module(Module),
@@ -189,6 +196,7 @@ impl_arena_id!(ImplId);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ImplData {
+    pub(super) impl_id: FileAstId<ast::ImplBlock>,
     pub(super) target_trait: Option<TypeRef>,
     pub(super) target_type: TypeRef,
     pub(super) items: Vec<DefKind>,
@@ -197,6 +205,7 @@ pub(super) struct ImplData {
 
 impl ImplData {
     fn from_ast(node: &ast::ImplBlock, ast_id_map: &AstIdMap) -> Self {
+        let impl_id = ast_id_map.ast_id(node);
         let target_trait = node.target_trait().map(TypeRef::from_ast);
         let target_type = TypeRef::from_ast_opt(node.target_type());
         let negative = node.is_negative();
@@ -210,7 +219,7 @@ impl ImplData {
                 ast::ImplItemKind::TypeAliasDef(it) => DefKind::TypeAlias(ast_id_map.ast_id(it)),
             })
             .collect();
-        ImplData { target_trait, target_type, items, negative }
+        ImplData { impl_id, target_trait, target_type, items, negative }
     }
 }
 

@@ -14,7 +14,7 @@ use crate::{
     generics::HasGenericParams,
     docs::{Documentation, Docs, docs_from_ast},
     ids::{FunctionId, StructId, EnumId, AstItemDef, ConstId, StaticId, TraitId, TypeAliasId, MacroDefId},
-    impl_block::ImplBlock,
+    impl_block::{ImplBlock, ImplItem},
     resolve::Resolver,
     diagnostics::{DiagnosticSink},
     traits::{TraitItem, TraitData},
@@ -306,13 +306,14 @@ impl Module {
             .collect()
     }
 
-    pub fn impl_blocks(self, db: &impl HirDatabase) -> Vec<ImplBlock> {
-        let module_impl_blocks = db.impls_in_module(self);
-        module_impl_blocks
-            .impls
-            .iter()
-            .map(|(impl_id, _)| ImplBlock::from_id(self, impl_id))
-            .collect()
+    pub fn impl_blocks(self, db: &impl DefDatabase) -> Vec<ImplBlock> {
+        let def_map = db.crate_def_map(self.krate);
+        def_map[self.module_id].impls.keys().map(|&it| it).collect()
+    }
+
+    fn impl_block_for(self, db: &impl DefDatabase, impl_item: ImplItem) -> Option<ImplBlock> {
+        let def_map = db.crate_def_map(self.krate);
+        def_map[self.module_id].impls_by_def.get(&impl_item).copied()
     }
 
     fn with_module_id(&self, module_id: CrateModuleId) -> Module {
@@ -720,8 +721,7 @@ impl Function {
 
     /// The containing impl block, if this is a method.
     pub fn impl_block(self, db: &impl DefDatabase) -> Option<ImplBlock> {
-        let module_impls = db.impls_in_module(self.module(db));
-        ImplBlock::containing(module_impls, self.into())
+        self.module(db).impl_block_for(db, self.into())
     }
 
     /// The containing trait, if this is a trait method definition.
@@ -791,8 +791,7 @@ impl Const {
 
     /// The containing impl block, if this is a method.
     pub fn impl_block(self, db: &impl DefDatabase) -> Option<ImplBlock> {
-        let module_impls = db.impls_in_module(self.module(db));
-        ImplBlock::containing(module_impls, self.into())
+        self.module(db).impl_block_for(db, self.into())
     }
 
     // FIXME: move to a more general type for 'body-having' items
@@ -962,8 +961,7 @@ impl TypeAlias {
 
     /// The containing impl block, if this is a method.
     pub fn impl_block(self, db: &impl DefDatabase) -> Option<ImplBlock> {
-        let module_impls = db.impls_in_module(self.module(db));
-        ImplBlock::containing(module_impls, self.into())
+        self.module(db).impl_block_for(db, self.into())
     }
 
     /// The containing trait, if this is a trait method definition.

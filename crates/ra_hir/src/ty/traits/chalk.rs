@@ -348,7 +348,7 @@ where
             .target_trait_ref(self.db)
             .expect("FIXME handle unresolved impl block trait ref")
             .subst(&bound_vars);
-        let impl_type = if impl_block.module().krate(self.db) == Some(self.krate) {
+        let impl_type = if impl_block.module(self.db).krate(self.db) == Some(self.krate) {
             chalk_rust_ir::ImplType::Local
         } else {
             chalk_rust_ir::ImplType::External

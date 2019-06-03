@@ -65,11 +65,12 @@ use ra_prof::profile;
 use once_cell::sync::Lazy;
 
 use crate::{
-    ModuleDef, Name, Crate, Module, MacroDef, AsName, BuiltinType, AstDatabase,
+    ModuleDef, Name, Crate, Module, MacroDef, AsName, BuiltinType, AstDatabase, ImplBlock,
     DefDatabase, Path, PathKind, HirFileId, Trait,
-    ids::MacroDefId,
+    ids::{MacroDefId},
     diagnostics::DiagnosticSink,
     nameres::diagnostics::DefDiagnostic,
+    impl_block::{ImplData, ImplItem},
     AstId,
 };
 
@@ -133,6 +134,9 @@ pub(crate) struct ModuleData {
     ///
     /// Note that non-inline modules, by definition, live inside non-macro file.
     pub(crate) definition: Option<FileId>,
+
+    pub(crate) impls: FxHashMap<ImplBlock, ImplData>,
+    pub(crate) impls_by_def: FxHashMap<ImplItem, ImplBlock>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
