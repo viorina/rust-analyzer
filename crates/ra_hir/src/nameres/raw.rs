@@ -7,7 +7,10 @@ use ra_syntax::{
     ast::{self, NameOwner, AttrsOwner},
 };
 
-use crate::{DefDatabase, Name, AsName, Path, HirFileId, ModuleSource, AstIdMap, FileAstId, Either, AstDatabase};
+use crate::{
+    DefDatabase, Name, AsName, Path, HirFileId, ModuleSource, AstIdMap, FileAstId, Either, AstDatabase,
+    type_ref::TypeRef,
+};
 
 /// `RawItems` is a set of top-level items in a file (except for impls).
 ///
@@ -17,6 +20,7 @@ use crate::{DefDatabase, Name, AsName, Path, HirFileId, ModuleSource, AstIdMap, 
 pub struct RawItems {
     modules: Arena<Module, ModuleData>,
     imports: Arena<ImportId, ImportData>,
+    impls: Arena<ImplId, ImplData>,
     defs: Arena<Def, DefData>,
     macros: Arena<Macro, MacroData>,
     /// items for top-level module
@@ -69,7 +73,7 @@ impl RawItems {
     ) -> (Arc<RawItems>, Arc<ImportSourceMap>) {
         let mut collector = RawItemsCollector {
             raw_items: RawItems::default(),
-            source_ast_id_map: db.ast_id_map(file_id.into()),
+            ast_id_map: db.ast_id_map(file_id.into()),
             source_map: ImportSourceMap::default(),
         };
         if let Some(node) = db.parse_or_expand(file_id) {
@@ -119,6 +123,7 @@ pub(super) enum RawItem {
     Import(ImportId),
     Def(Def),
     Macro(Macro),
+    Impl(ImplId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -178,9 +183,40 @@ pub(super) struct MacroData {
     pub(super) export: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(super) struct ImplId(RawId);
+impl_arena_id!(ImplId);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ImplData {
+    pub(super) target_trait: Option<TypeRef>,
+    pub(super) target_type: TypeRef,
+    pub(super) items: Vec<DefKind>,
+    pub(super) negative: bool,
+}
+
+impl ImplData {
+    fn from_ast(node: &ast::ImplBlock, ast_id_map: &AstIdMap) -> Self {
+        let target_trait = node.target_trait().map(TypeRef::from_ast);
+        let target_type = TypeRef::from_ast_opt(node.target_type());
+        let negative = node.is_negative();
+        let items = node
+            .item_list()
+            .into_iter()
+            .flat_map(|it| it.impl_items())
+            .map(|item_node| match item_node.kind() {
+                ast::ImplItemKind::FnDef(it) => DefKind::Function(ast_id_map.ast_id(it)),
+                ast::ImplItemKind::ConstDef(it) => DefKind::Const(ast_id_map.ast_id(it)),
+                ast::ImplItemKind::TypeAliasDef(it) => DefKind::TypeAlias(ast_id_map.ast_id(it)),
+            })
+            .collect();
+        ImplData { target_trait, target_type, items, negative }
+    }
+}
+
 struct RawItemsCollector {
     raw_items: RawItems,
-    source_ast_id_map: Arc<AstIdMap>,
+    ast_id_map: Arc<AstIdMap>,
     source_map: ImportSourceMap,
 }
 
@@ -208,12 +244,12 @@ impl RawItemsCollector {
                 self.add_extern_crate_item(current_module, extern_crate);
                 return;
             }
-            ast::ModuleItemKind::ImplBlock(_) => {
-                // impls don't participate in name resolution
+            ast::ModuleItemKind::ImplBlock(impl_) => {
+                self.add_impl(current_module, impl_);
                 return;
             }
             ast::ModuleItemKind::StructDef(it) => {
-                let id = self.source_ast_id_map.ast_id(it);
+                let id = self.ast_id_map.ast_id(it);
                 let name = it.name();
                 if it.is_union() {
                     (DefKind::Union(id), name)
@@ -222,22 +258,22 @@ impl RawItemsCollector {
                 }
             }
             ast::ModuleItemKind::EnumDef(it) => {
-                (DefKind::Enum(self.source_ast_id_map.ast_id(it)), it.name())
+                (DefKind::Enum(self.ast_id_map.ast_id(it)), it.name())
             }
             ast::ModuleItemKind::FnDef(it) => {
-                (DefKind::Function(self.source_ast_id_map.ast_id(it)), it.name())
+                (DefKind::Function(self.ast_id_map.ast_id(it)), it.name())
             }
             ast::ModuleItemKind::TraitDef(it) => {
-                (DefKind::Trait(self.source_ast_id_map.ast_id(it)), it.name())
+                (DefKind::Trait(self.ast_id_map.ast_id(it)), it.name())
             }
             ast::ModuleItemKind::TypeAliasDef(it) => {
-                (DefKind::TypeAlias(self.source_ast_id_map.ast_id(it)), it.name())
+                (DefKind::TypeAlias(self.ast_id_map.ast_id(it)), it.name())
             }
             ast::ModuleItemKind::ConstDef(it) => {
-                (DefKind::Const(self.source_ast_id_map.ast_id(it)), it.name())
+                (DefKind::Const(self.ast_id_map.ast_id(it)), it.name())
             }
             ast::ModuleItemKind::StaticDef(it) => {
-                (DefKind::Static(self.source_ast_id_map.ast_id(it)), it.name())
+                (DefKind::Static(self.ast_id_map.ast_id(it)), it.name())
             }
         };
         if let Some(name) = name {
@@ -252,7 +288,7 @@ impl RawItemsCollector {
             Some(it) => it.as_name(),
             None => return,
         };
-        let ast_id = self.source_ast_id_map.ast_id(module);
+        let ast_id = self.ast_id_map.ast_id(module);
         if module.has_semi() {
             let item = self.raw_items.modules.alloc(ModuleData::Declaration { name, ast_id });
             self.push_item(current_module, RawItem::Module(item));
@@ -301,6 +337,12 @@ impl RawItemsCollector {
         }
     }
 
+    fn add_impl(&mut self, current_module: Option<Module>, impl_block: &ast::ImplBlock) {
+        let impl_data = ImplData::from_ast(impl_block, &*self.ast_id_map);
+        let impl_id = self.raw_items.impls.alloc(impl_data);
+        self.push_item(current_module, RawItem::Impl(impl_id));
+    }
+
     fn add_macro(&mut self, current_module: Option<Module>, m: &ast::MacroCall) {
         let path = match m.path().and_then(Path::from_ast) {
             Some(it) => it,
@@ -308,7 +350,7 @@ impl RawItemsCollector {
         };
 
         let name = m.name().map(|it| it.as_name());
-        let ast_id = self.source_ast_id_map.ast_id(m);
+        let ast_id = self.ast_id_map.ast_id(m);
         let export = m.has_atom_attr("macro_export");
         let m = self.raw_items.macros.alloc(MacroData { ast_id, path, name, export });
         self.push_item(current_module, RawItem::Macro(m));
