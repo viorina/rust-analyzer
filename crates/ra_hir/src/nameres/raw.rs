@@ -3,13 +3,14 @@ use std::{sync::Arc, ops::Index};
 use test_utils::tested_by;
 use ra_arena::{Arena, impl_arena_id, RawId, map::ArenaMap};
 use ra_syntax::{
-    AstNode, SourceFile, AstPtr, TreeArc,
+    AstNode, SourceFile, AstPtr, TreeArc, SmolStr,
     ast::{self, NameOwner, AttrsOwner},
 };
 
 use crate::{
     DefDatabase, Name, AsName, Path, HirFileId, ModuleSource, AstIdMap, FileAstId, Either, AstDatabase,
     type_ref::TypeRef,
+    lang_item::lang_item_from_ast,
 };
 
 /// `RawItems` is a set of top-level items in a file (except for impls).
@@ -196,6 +197,7 @@ impl_arena_id!(ImplId);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ImplData {
+    pub(super) lang_item: Option<SmolStr>,
     pub(super) impl_id: FileAstId<ast::ImplBlock>,
     pub(super) target_trait: Option<TypeRef>,
     pub(super) target_type: TypeRef,
@@ -209,6 +211,7 @@ impl ImplData {
         let target_trait = node.target_trait().map(TypeRef::from_ast);
         let target_type = TypeRef::from_ast_opt(node.target_type());
         let negative = node.is_negative();
+        let lang_item = lang_item_from_ast(node);
         let items = node
             .item_list()
             .into_iter()
@@ -219,7 +222,7 @@ impl ImplData {
                 ast::ImplItemKind::TypeAliasDef(it) => DefKind::TypeAlias(ast_id_map.ast_id(it)),
             })
             .collect();
-        ImplData { impl_id, target_trait, target_type, items, negative }
+        ImplData { lang_item, impl_id, target_trait, target_type, items, negative }
     }
 }
 

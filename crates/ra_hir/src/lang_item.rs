@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use rustc_hash::FxHashMap;
 
-use ra_syntax::{SmolStr, ast::AttrsOwner};
+use ra_syntax::{SmolStr, ast};
 
 use crate::{
     Crate, DefDatabase, Enum, Function, HirDatabase, ImplBlock, Module, Static, Struct, Trait, AstDatabase,
@@ -85,18 +85,9 @@ impl LangItems {
     ) {
         // Look for impl targets
         for impl_block in module.impl_blocks(db) {
-            // TODO:
-            // let impl_block = source_map.get(&source, impl_id);
-            // let lang_item_name = impl_block
-            //     .attrs()
-            //     .filter_map(|a| a.as_key_value())
-            //     .filter(|(key, _)| key == "lang")
-            //     .map(|(_, val)| val)
-            //     .nth(0);
-            // if let Some(lang_item_name) = lang_item_name {
-            //     let imp = ImplBlock::from_id(*module, impl_id);
-            //     self.items.entry(lang_item_name).or_insert(LangItemTarget::ImplBlock(imp));
-            // }
+            if let Some(lang_item_name) = impl_block.lang_item(db) {
+                self.items.entry(lang_item_name).or_insert(LangItemTarget::ImplBlock(impl_block));
+            }
         }
 
         // FIXME we should look for the other lang item targets (traits, structs, ...)
@@ -106,4 +97,12 @@ impl LangItems {
             self.collect_lang_items_recursive(db, &child);
         }
     }
+}
+
+pub(crate) fn lang_item_from_ast(node: &impl ast::AttrsOwner) -> Option<SmolStr> {
+    node.attrs()
+        .filter_map(|a| a.as_key_value())
+        .filter(|(key, _)| key == "lang")
+        .map(|(_, val)| val)
+        .nth(0)
 }
