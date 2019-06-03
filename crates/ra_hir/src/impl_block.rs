@@ -1,5 +1,5 @@
 use ra_syntax::{
-    TreeArc,
+    TreeArc, SmolStr,
     ast
 };
 
@@ -34,6 +34,10 @@ impl ImplBlock {
 
     pub fn module(&self, db: &impl DefDatabase) -> Module {
         db.lookup_intern_impl(self.impl_id).module
+    }
+
+    pub fn lang_item(&self, db: &impl DefDatabase) -> Option<SmolStr> {
+        self.with_data(db, |data| data.lang_item.clone())
     }
 
     pub fn target_trait(&self, db: &impl DefDatabase) -> Option<TypeRef> {
@@ -79,6 +83,7 @@ impl ImplBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImplData {
+    pub(super) lang_item: Option<SmolStr>,
     pub(crate) target_trait: Option<TypeRef>,
     pub(crate) target_type: TypeRef,
     pub(crate) items: Vec<ImplItem>,

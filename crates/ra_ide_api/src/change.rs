@@ -233,7 +233,6 @@ impl RootDatabase {
         self.query(hir::db::AstIdMapQuery).sweep(sweep);
 
         self.query(hir::db::RawItemsWithSourceMapQuery).sweep(sweep);
-        self.query(hir::db::ImplsInModuleWithSourceMapQuery).sweep(sweep);
         self.query(hir::db::BodyWithSourceMapQuery).sweep(sweep);
 
         self.query(hir::db::ExprScopesQuery).sweep(sweep);

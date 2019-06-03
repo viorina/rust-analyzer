@@ -640,6 +640,7 @@ where
             .impls_by_def
             .extend(items.iter().map(|&item| (item, impl_block)));
         let impl_data = ImplData {
+            lang_item: impl_data.lang_item.clone(),
             target_trait: impl_data.target_trait.clone(),
             target_type: impl_data.target_type.clone(),
             items,
