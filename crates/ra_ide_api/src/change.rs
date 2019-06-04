@@ -222,7 +222,6 @@ impl RootDatabase {
     pub(crate) fn collect_garbage(&mut self) {
         let _p = profile("RootDatabase::collect_garbage");
         self.last_gc = time::Instant::now();
-        return;
         let sweep = SweepStrategy::default().discard_values().sweep_all_revisions();
 
         self.query(ra_db::ParseQuery).sweep(sweep);

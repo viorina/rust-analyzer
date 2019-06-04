@@ -97,8 +97,12 @@ pub trait DefDatabase: SourceDatabase {
         file_id: HirFileId,
     ) -> (Arc<RawItems>, Arc<ImportSourceMap>);
 
+    #[salsa::transparent]
     #[salsa::invoke(CrateDefMap::crate_def_map_query)]
     fn crate_def_map(&self, krate: Crate) -> Arc<CrateDefMap>;
+
+    #[salsa::invoke(CrateDefMap::crate_def_map_impl_query)]
+    fn crate_def_map_impl(&self, krate: Crate) -> Arc<CrateDefMap>;
 
     // #[salsa::invoke(crate::impl_block::impls_in_module)]
     // fn impls_in_module(&self, module: Module) -> Arc<ModuleImplBlocks>;

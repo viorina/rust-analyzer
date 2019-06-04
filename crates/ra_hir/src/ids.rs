@@ -62,6 +62,9 @@ impl HirFileId {
         file_id: HirFileId,
     ) -> Option<TreeArc<SyntaxNode>> {
         db.check_canceled();
+        if !ra_prof::Scope::is_active() {
+            ra_prof::print_backtrace()
+        }
         match file_id.0 {
             HirFileIdRepr::File(file_id) => Some(db.parse(file_id).tree.syntax().to_owned()),
             HirFileIdRepr::Macro(macro_file) => db.parse_macro(macro_file),

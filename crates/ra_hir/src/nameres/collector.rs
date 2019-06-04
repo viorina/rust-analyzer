@@ -18,6 +18,7 @@ use crate::{
     },
     ids::{AstItemDef, LocationCtx, MacroCallLoc, MacroCallId, MacroDefId, MacroFileKind},
     impl_block::{ImplData, ImplItem},
+    generics::HasGenericParams,
     AstId,
 };
 
@@ -48,7 +49,6 @@ pub(super) fn collect_defs(
         unexpanded_macros: Vec::new(),
         global_macro_scope: FxHashMap::default(),
         macro_stack_monitor: MacroStackMonitor::default(),
-        parsed: vec![],
     };
     collector.collect();
     collector.finish()
@@ -94,7 +94,6 @@ struct DefCollector<DB> {
     /// Some macro use `$tt:tt which mean we have to handle the macro perfectly
     /// To prevent stackoverflow, we add a deep counter here for prevent that.
     macro_stack_monitor: MacroStackMonitor,
-    parsed: Vec<HirFileId>,
 }
 
 impl<'a, DB> DefCollector<&'a DB>
@@ -104,7 +103,7 @@ where
     fn collect(&mut self) {
         let crate_graph = self.db.crate_graph();
         let file_id = crate_graph.crate_root(self.def_map.krate.crate_id());
-        self.parsed.push(file_id.into());
+        super::record_parse(file_id.into());
         let raw_items = self.db.raw_items(file_id.into());
         let module_id = self.def_map.root;
         self.def_map.modules[module_id].definition = Some(file_id);
@@ -451,7 +450,7 @@ where
 
         if !self.macro_stack_monitor.is_poison(macro_def_id) {
             let file_id: HirFileId = macro_call_id.as_file(MacroFileKind::Items);
-            self.parsed.push(file_id);
+            super::record_parse(file_id);
             let raw_items = self.db.raw_items(file_id);
             ModCollector { def_collector: &mut *self, file_id, module_id, raw_items: &raw_items }
                 .collect(raw_items.items());
@@ -464,10 +463,6 @@ where
     }
 
     fn finish(self) -> CrateDefMap {
-        for file_id in self.parsed.iter() {
-            file_id.remove_parse_tree(self.db);
-        }
-
         self.def_map
     }
 }
@@ -521,7 +516,7 @@ where
                 match resolve_submodule(self.def_collector.db, self.file_id, name, is_root) {
                     Ok(file_id) => {
                         let module_id = self.push_child_module(name.clone(), ast_id, Some(file_id));
-                        self.def_collector.parsed.push(file_id.into());
+                        super::record_parse(file_id.into());
                         let raw_items = self.def_collector.db.raw_items(file_id.into());
                         ModCollector {
                             def_collector: &mut *self.def_collector,
@@ -590,6 +585,15 @@ where
             raw::DefKind::Trait(ast_id) => PerNs::types(def!(Trait, ast_id)),
             raw::DefKind::TypeAlias(ast_id) => PerNs::types(def!(TypeAlias, ast_id)),
         };
+        match def.take_types() {
+            Some(crate::ModuleDef::Struct(it)) => super::record_def(it.into()),
+            Some(crate::ModuleDef::Function(it)) => super::record_def(it.into()),
+            Some(crate::ModuleDef::TypeAlias(it)) => super::record_def(it.into()),
+            Some(crate::ModuleDef::Enum(it)) => super::record_def(it.into()),
+            Some(crate::ModuleDef::Trait(it)) => super::record_def(it.into()),
+            // Some(crate::ModuleDef::EnumVariant(it)) => super::record_def(it.into()),
+            _ => (),
+        }
         let resolution = Resolution { def, import: None };
         self.def_collector.update(self.module_id, None, &[(name, Either::Left(resolution))])
     }
@@ -633,15 +637,23 @@ where
         let items = impl_data
             .items
             .iter()
-            .map(|kind| match *kind {
-                raw::DefKind::Function(ast_id) => def!(Function, ast_id),
-                raw::DefKind::Const(ast_id) => def!(Const, ast_id),
-                raw::DefKind::TypeAlias(ast_id) => def!(TypeAlias, ast_id),
-                raw::DefKind::Struct(..)
-                | raw::DefKind::Union(..)
-                | raw::DefKind::Enum(..)
-                | raw::DefKind::Static(..)
-                | raw::DefKind::Trait(..) => unreachable!(),
+            .map(|kind| {
+                let def = match *kind {
+                    raw::DefKind::Function(ast_id) => def!(Function, ast_id),
+                    raw::DefKind::Const(ast_id) => def!(Const, ast_id),
+                    raw::DefKind::TypeAlias(ast_id) => def!(TypeAlias, ast_id),
+                    raw::DefKind::Struct(..)
+                    | raw::DefKind::Union(..)
+                    | raw::DefKind::Enum(..)
+                    | raw::DefKind::Static(..)
+                    | raw::DefKind::Trait(..) => unreachable!(),
+                };
+                match def {
+                    ImplItem::Method(it) => super::record_def(it.into()),
+                    ImplItem::TypeAlias(it) => super::record_def(it.into()),
+                    _ => (),
+                }
+                def
             })
             .collect::<Vec<_>>();
         let impl_block = ImplBlock { impl_id: AstItemDef::from_ast_id(ctx, impl_data.impl_id) };
@@ -725,7 +737,6 @@ mod tests {
             unexpanded_macros: Vec::new(),
             global_macro_scope: FxHashMap::default(),
             macro_stack_monitor: monitor,
-            parsed: vec![],
         };
         collector.collect();
         collector.finish()

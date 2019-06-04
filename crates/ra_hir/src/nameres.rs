@@ -235,8 +235,45 @@ fn or(left: ItemOrMacro, right: ItemOrMacro) -> ItemOrMacro {
     }
 }
 
+use crate::generics::{GenericDef, HasGenericParams};
+#[derive(Default)]
+struct DM {
+    parsed: Vec<HirFileId>,
+    defs: Vec<GenericDef>,
+}
+
+thread_local! {
+    static DM: std::cell::RefCell<Vec<DM>> = Default::default();
+}
+
+fn record_parse(file_id: HirFileId) {
+    DM.with(|slot| slot.borrow_mut().last_mut().unwrap().parsed.push(file_id))
+}
+
+fn record_def(def: GenericDef) {
+    DM.with(|slot| slot.borrow_mut().last_mut().unwrap().defs.push(def))
+}
+
 impl CrateDefMap {
     pub(crate) fn crate_def_map_query(
+        db: &(impl DefDatabase + AstDatabase),
+        krate: Crate,
+    ) -> Arc<CrateDefMap> {
+        let _scope = ra_prof::Scope::enter();
+
+        DM.with(|slot| slot.borrow_mut().push(DM::default()));
+        let ret = db.crate_def_map_impl(krate);
+        let dm = DM.with(|slot| slot.borrow_mut().pop().unwrap());
+        for def in dm.defs.iter() {
+            def.generic_params(db);
+        }
+        for file_id in dm.parsed.iter() {
+            file_id.remove_parse_tree(db);
+        }
+        ret
+    }
+
+    pub(crate) fn crate_def_map_impl_query(
         db: &(impl DefDatabase + AstDatabase),
         krate: Crate,
     ) -> Arc<CrateDefMap> {
