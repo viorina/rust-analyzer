@@ -711,7 +711,7 @@ impl Function {
         db.type_for_def(self.into(), Namespace::Values)
     }
 
-    pub fn signature(self, db: &impl HirDatabase) -> Arc<FnSignature> {
+    pub fn signature(self, db: &impl DefDatabase) -> Arc<FnSignature> {
         db.fn_signature(self)
     }
 
@@ -781,7 +781,7 @@ impl Const {
         self.id.module(db)
     }
 
-    pub fn signature(self, db: &impl HirDatabase) -> Arc<ConstSignature> {
+    pub fn signature(self, db: &impl DefDatabase) -> Arc<ConstSignature> {
         db.const_signature(self)
     }
 
@@ -869,7 +869,7 @@ impl Static {
         self.id.module(db)
     }
 
-    pub fn signature(self, db: &impl HirDatabase) -> Arc<ConstSignature> {
+    pub fn signature(self, db: &impl DefDatabase) -> Arc<ConstSignature> {
         db.static_signature(self)
     }
 

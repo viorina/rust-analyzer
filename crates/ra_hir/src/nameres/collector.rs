@@ -591,7 +591,8 @@ where
             Some(crate::ModuleDef::TypeAlias(it)) => super::record_def(it.into()),
             Some(crate::ModuleDef::Enum(it)) => super::record_def(it.into()),
             Some(crate::ModuleDef::Trait(it)) => super::record_def(it.into()),
-            // Some(crate::ModuleDef::EnumVariant(it)) => super::record_def(it.into()),
+            Some(crate::ModuleDef::Const(it)) => super::record_const(it),
+            Some(crate::ModuleDef::Static(it)) => super::record_static(it),
             _ => (),
         }
         let resolution = Resolution { def, import: None };
@@ -650,6 +651,7 @@ where
                 };
                 match def {
                     ImplItem::Method(it) => super::record_def(it.into()),
+                    ImplItem::Const(it) => super::record_const(it.into()),
                     ImplItem::TypeAlias(it) => super::record_def(it.into()),
                     _ => (),
                 }

@@ -240,6 +240,8 @@ use crate::generics::{GenericDef, HasGenericParams};
 struct DM {
     parsed: Vec<HirFileId>,
     defs: Vec<GenericDef>,
+    consts: Vec<crate::Const>,
+    statics: Vec<crate::Static>,
 }
 
 thread_local! {
@@ -254,6 +256,14 @@ fn record_def(def: GenericDef) {
     DM.with(|slot| slot.borrow_mut().last_mut().unwrap().defs.push(def))
 }
 
+fn record_const(def: crate::Const) {
+    DM.with(|slot| slot.borrow_mut().last_mut().unwrap().consts.push(def))
+}
+
+fn record_static(def: crate::Static) {
+    DM.with(|slot| slot.borrow_mut().last_mut().unwrap().statics.push(def))
+}
+
 impl CrateDefMap {
     pub(crate) fn crate_def_map_query(
         db: &(impl DefDatabase + AstDatabase),
@@ -266,6 +276,24 @@ impl CrateDefMap {
         let dm = DM.with(|slot| slot.borrow_mut().pop().unwrap());
         for def in dm.defs.iter() {
             def.generic_params(db);
+            match def {
+                crate::generics::GenericDef::Function(it) => {
+                    it.signature(db);
+                }
+                crate::generics::GenericDef::Struct(it) => {
+                    db.struct_data(*it);
+                }
+                crate::generics::GenericDef::Enum(it) => {
+                    db.enum_data(*it);
+                }
+                _ => (),
+            }
+        }
+        for c in dm.consts.iter() {
+            c.signature(db);
+        }
+        for c in dm.statics.iter() {
+            c.signature(db);
         }
         for file_id in dm.parsed.iter() {
             file_id.remove_parse_tree(db);
