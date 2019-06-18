@@ -68,6 +68,7 @@ pub use self::{
     resolve::Resolution,
     generics::{GenericParams, GenericParam, HasGenericParams},
     source_binder::{SourceAnalyzer, PathResolution, ScopeEntryWithSyntax},
+    type_ref::TypeRef,
 };
 
 pub use self::code_model::{

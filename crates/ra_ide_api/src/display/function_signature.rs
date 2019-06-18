@@ -3,7 +3,7 @@ use std::fmt::{self, Display};
 use join_to_string::join;
 use ra_syntax::ast::{self, AstNode, NameOwner, VisibilityOwner};
 use std::convert::From;
-use hir::{Docs, Documentation, HasSource};
+use hir::{Docs, Documentation};
 
 use crate::{db, display::{where_predicates, generic_parameters}};
 
@@ -16,26 +16,46 @@ pub struct FunctionSignature {
     pub name: Option<String>,
     /// Documentation for the function
     pub doc: Option<Documentation>,
-    /// Generic parameters
-    pub generic_parameters: Vec<String>,
     /// Parameters of the function
     pub parameters: Vec<String>,
     /// Optional return type
     pub ret_type: Option<String>,
+    /// Generic parameters
+    pub generic_parameters: Vec<String>,
     /// Where predicates
     pub where_predicates: Vec<String>,
 }
 
 impl FunctionSignature {
-    pub(crate) fn with_doc_opt(mut self, doc: Option<Documentation>) -> Self {
-        self.doc = doc;
-        self
-    }
-
     pub(crate) fn from_hir(db: &db::RootDatabase, function: hir::Function) -> Self {
+        // NOTE: we don't touch AST here to avoiding parsing
+        let data = function.data(db);
         let doc = function.docs(db);
-        let ast_node = function.source(db).ast;
-        FunctionSignature::from(&*ast_node).with_doc_opt(doc)
+        let ret_type = match data.ret_type() {
+            hir::TypeRef::Tuple(xs) if xs.len() == 0 => None,
+            t => Some(t.to_string()),
+        };
+        let parameters = if data.has_self_param() {
+            let self_param = match data.params()[0] {
+                hir::TypeRef::Reference(_, m) => format!("&{}self", m.as_keyword_for_ref()),
+                _ => "self".to_string(),
+            };
+            let mut params = vec![self_param];
+            params.extend(data.params().iter().skip(1).map(|it| it.to_string()));
+            params
+        } else {
+            data.params().iter().map(|it| it.to_string()).collect()
+        };
+        FunctionSignature {
+            visibility: data.visibility().map(|it| it.to_string()),
+            name: Some(data.name().to_string()),
+            doc,
+            parameters,
+            ret_type,
+            // FIXME: fill this as well
+            generic_parameters: vec![],
+            where_predicates: vec![],
+        }
     }
 }
 
@@ -61,10 +81,10 @@ impl From<&'_ ast::FnDef> for FunctionSignature {
                 .and_then(|r| r.type_ref())
                 .map(|n| n.syntax().text().to_string()),
             parameters: param_list(node),
-            generic_parameters: generic_parameters(node),
-            where_predicates: where_predicates(node),
             // docs are processed separately
             doc: None,
+            generic_parameters: generic_parameters(node),
+            where_predicates: where_predicates(node),
         }
     }
 }

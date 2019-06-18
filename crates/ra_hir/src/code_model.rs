@@ -535,7 +535,7 @@ pub struct Function {
 pub struct FnData {
     pub(crate) visibility: Option<Visibility>,
     pub(crate) name: Name,
-    pub(crate) params: Vec<TypeRef>,
+    pub(crate) params: Vec<(Name, TypeRef)>,
     pub(crate) ret_type: TypeRef,
     /// True if the first param is `self`. This is relevant to decide whether this
     /// can be called as a method.

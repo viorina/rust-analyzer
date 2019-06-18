@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use ra_syntax::{ast::{self, NameOwner}, AstNode};
 
@@ -235,4 +235,47 @@ fn convert_path(prefix: Option<Path>, path: &ast::Path) -> Option<Path> {
         }
     };
     Some(res)
+}
+
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut skip_sep = false;
+        match self.kind {
+            PathKind::Self_ => write!(f, "self")?,
+            PathKind::Super => write!(f, "super")?,
+            PathKind::Crate => write!(f, "crate")?,
+            PathKind::Abs => (),
+            PathKind::Plain => skip_sep = true,
+        }
+        for segment in self.segments.iter() {
+            if !skip_sep {
+                write!(f, "::")?
+            }
+            write!(f, "{}", segment)?;
+            skip_sep = false
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for PathSegment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)?;
+        if let Some(args) = &self.args_and_bindings {
+            write!(f, "::")?;
+            join_to_string::join(args.args.iter())
+                .surround_with("<", ">")
+                .separator(", ")
+                .to_fmt(f)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for GenericArg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GenericArg::Type(t) => fmt::Display::fmt(t, f),
+        }
+    }
 }

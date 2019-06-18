@@ -1,7 +1,9 @@
 //! HIR for references to types. Paths in these are not yet resolved. They can
 //! be directly created from an ast::TypeRef, without further queries.
+use std::fmt;
 
 use ra_syntax::ast::{self, TypeAscriptionOwner};
+use join_to_string::join;
 
 use crate::Path;
 
@@ -105,5 +107,26 @@ impl TypeRef {
 
     pub fn unit() -> TypeRef {
         TypeRef::Tuple(Vec::new())
+    }
+}
+
+impl fmt::Display for TypeRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeRef::Never => write!(f, "!"),
+            TypeRef::Placeholder => write!(f, "_"),
+            TypeRef::Tuple(xs) => join(xs.iter()).surround_with("(", ")").separator(", ").to_fmt(f),
+            TypeRef::Path(p) => write!(f, "{}", p),
+            TypeRef::RawPtr(t, m) => write!(f, "*{}{}", m.as_keyword_for_ptr(), t),
+            TypeRef::Reference(t, m) => write!(f, "&{}{}", m.as_keyword_for_ref(), t),
+            TypeRef::Array(t) | TypeRef::Slice(t) => write!(f, "[{}]", t),
+            TypeRef::Fn(args) => {
+                let (ret_ty, args) = args.split_last().unwrap();
+                write!(f, "fn")?;
+                join(args.iter()).surround_with("(", ")").separator(", ").to_fmt(f)?;
+                write!(f, " -> {}", ret_ty)
+            }
+            TypeRef::Error => write!(f, "_"),
+        }
     }
 }
