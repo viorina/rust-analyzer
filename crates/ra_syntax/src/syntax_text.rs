@@ -34,12 +34,6 @@ impl<'a> SyntaxText<'a> {
         self.chunks().collect()
     }
 
-    pub fn to_smol_string(&self) -> SmolStr {
-        // FIXME: use `self.chunks().collect()` here too once
-        // https://github.com/matklad/smol_str/pull/12 is merged and published
-        self.to_string().into()
-    }
-
     pub fn contains(&self, c: char) -> bool {
         self.chunks().any(|it| it.contains(c))
     }
@@ -103,13 +97,13 @@ impl<'a> SyntaxText<'a> {
     }
 }
 
-impl<'a> fmt::Debug for SyntaxText<'a> {
+impl fmt::Debug for SyntaxText<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&self.to_string(), f)
     }
 }
 
-impl<'a> fmt::Display for SyntaxText<'a> {
+impl fmt::Display for SyntaxText<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.to_string(), f)
     }
@@ -118,6 +112,14 @@ impl<'a> fmt::Display for SyntaxText<'a> {
 impl From<SyntaxText<'_>> for String {
     fn from(text: SyntaxText) -> String {
         text.to_string()
+    }
+}
+
+impl From<SyntaxText<'_>> for SmolStr {
+    fn from(text: SyntaxText) -> SmolStr {
+        // FIXME: use `text.chunks().collect()` here too once
+        // https://github.com/matklad/smol_str/pull/12 is merged and published
+        text.to_string().into()
     }
 }
 

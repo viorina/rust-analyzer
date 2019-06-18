@@ -89,11 +89,11 @@ pub(crate) fn highlight(db: &RootDatabase, file_id: FileId) -> Vec<HighlightedRa
                         Some(SelfType(_)) => "type",
                         Some(Pat(ptr)) => {
                             binding_hash = Some({
-                                let text = ptr
+                                let text: SmolStr = ptr
                                     .syntax_node_ptr()
                                     .to_node(&source_file.syntax())
                                     .text()
-                                    .to_smol_string();
+                                    .into();
                                 let shadow_count =
                                     bindings_shadow_count.entry(text.clone()).or_default();
                                 calc_binding_hash(file_id, &text, *shadow_count)
@@ -113,7 +113,7 @@ pub(crate) fn highlight(db: &RootDatabase, file_id: FileId) -> Vec<HighlightedRa
                 if let Some(name) = node.as_node().and_then(ast::Name::cast) {
                     if name.syntax().ancestors().any(|x| ast::BindPat::cast(x).is_some()) {
                         binding_hash = Some({
-                            let text = name.syntax().text().to_smol_string();
+                            let text: SmolStr = name.syntax().text().into();
                             let shadow_count =
                                 bindings_shadow_count.entry(text.clone()).or_insert(0);
                             *shadow_count += 1;

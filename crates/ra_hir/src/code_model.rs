@@ -1,10 +1,13 @@
 pub(crate) mod src;
 pub(crate) mod docs;
 
-use std::sync::Arc;
+use std::{sync::Arc, fmt};
 
 use ra_db::{CrateId, SourceRootId, Edition, FileId};
-use ra_syntax::{ast::{self, NameOwner, TypeAscriptionOwner}, TreeArc};
+use ra_syntax::{
+    TreeArc, SmolStr, AstNode,
+    ast::{self, NameOwner, TypeAscriptionOwner, VisibilityOwner},
+};
 
 use crate::{
     Name, AsName, AstId, Ty, Either, KnownName, HasSource,
@@ -22,6 +25,15 @@ use crate::{
     traits::{TraitItem, TraitData},
     type_ref::Mutability,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Visibility(SmolStr);
+
+impl fmt::Display for Visibility {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
 
 /// hir::Crate describes a single crate. It's the main interface with which
 /// a crate's dependencies interact. Mostly, it should be just a proxy for the
@@ -521,6 +533,7 @@ pub struct Function {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FnData {
+    pub(crate) visibility: Option<Visibility>,
     pub(crate) name: Name,
     pub(crate) params: Vec<TypeRef>,
     pub(crate) ret_type: TypeRef,
@@ -567,10 +580,15 @@ impl FnData {
         } else {
             TypeRef::unit()
         };
-
-        let sig = FnData { name, params, ret_type, has_self_param };
+        let visibility = src.ast.visibility().map(|it| Visibility(it.syntax().text().into()));
+        let sig = FnData { visibility, name, params, ret_type, has_self_param };
         Arc::new(sig)
     }
+
+    pub fn visibility(&self) -> Option<&Visibility> {
+        self.visibility.as_ref()
+    }
+
     pub fn name(&self) -> &Name {
         &self.name
     }
