@@ -1,5 +1,5 @@
 //! Trait solving using Chalk.
-use std::sync::Arc;
+use std::{ops, sync::Arc, panic::AssertUnwindSafe};
 
 use parking_lot::Mutex;
 use rustc_hash::FxHashSet;
@@ -14,7 +14,17 @@ use self::chalk::{ToChalk, from_chalk};
 
 mod chalk;
 
-pub(crate) type Solver = chalk_solve::Solver;
+#[derive(Debug)]
+pub struct Solver {
+    inner: AssertUnwindSafe<Mutex<chalk_solve::Solver>>,
+}
+
+impl ops::Deref for Solver {
+    type Target = Mutex<chalk_solve::Solver>;
+    fn deref(&self) -> &Self::Target {
+        &*self.inner
+    }
+}
 
 /// This controls the maximum size of types Chalk considers. If we set this too
 /// high, we can run into slow edge cases; if we set it too low, Chalk won't
@@ -27,11 +37,11 @@ struct ChalkContext<'a, DB> {
     krate: Crate,
 }
 
-pub(crate) fn solver_query(_db: &impl HirDatabase, _krate: Crate) -> Arc<Mutex<Solver>> {
+pub(crate) fn solver_query(_db: &impl HirDatabase, _krate: Crate) -> Arc<Solver> {
     // krate parameter is just so we cache a unique solver per crate
     let solver_choice = chalk_solve::SolverChoice::SLG { max_size: CHALK_SOLVER_MAX_SIZE };
     debug!("Creating new solver for crate {:?}", _krate);
-    Arc::new(Mutex::new(solver_choice.into_solver()))
+    Arc::new(Solver { inner: AssertUnwindSafe(Mutex::new(solver_choice.into_solver())) })
 }
 
 /// Collects impls for the given trait in the whole dependency tree of `krate`.

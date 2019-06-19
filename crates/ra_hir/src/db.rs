@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use parking_lot::Mutex;
 use ra_syntax::{SyntaxNode, TreeArc, SmolStr, ast};
 use ra_db::{SourceDatabase, salsa};
 
@@ -171,12 +170,12 @@ pub trait HirDatabase: DefDatabase + AstDatabase {
 
     /// This provides the Chalk trait solver instance. Because Chalk always
     /// works from a specific crate, this query is keyed on the crate; and
-    /// because Chalk does its own internal caching, the solver is wrapped in a
-    /// Mutex and the query is marked volatile, to make sure the cached state is
-    /// thrown away when input facts change.
+    /// because Chalk does its own internal caching, the solver internally is
+    /// wrapped in a Mutex and the query is marked volatile, to make sure the
+    /// cached state is thrown away when input facts change.
     #[salsa::invoke(crate::ty::traits::solver_query)]
     #[salsa::volatile]
-    fn solver(&self, krate: Crate) -> Arc<Mutex<crate::ty::traits::Solver>>;
+    fn solver(&self, krate: Crate) -> Arc<crate::ty::traits::Solver>;
 
     #[salsa::invoke(crate::ty::traits::implements_query)]
     fn implements(

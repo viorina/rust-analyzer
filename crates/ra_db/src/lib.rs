@@ -16,7 +16,7 @@ pub use crate::{
     },
 };
 
-pub trait CheckCanceled {
+pub trait CheckCanceled: panic::RefUnwindSafe {
     /// Aborts current query if there are pending changes.
     ///
     /// rust-analyzer needs to be able to answer semantic questions about the
@@ -37,15 +37,14 @@ pub trait CheckCanceled {
         Self: Sized,
         F: FnOnce(&Self) -> T + panic::UnwindSafe,
     {
-        let this = panic::AssertUnwindSafe(self);
-        panic::catch_unwind(|| f(*this)).map_err(|err| match err.downcast::<Canceled>() {
+        panic::catch_unwind(|| f(self)).map_err(|err| match err.downcast::<Canceled>() {
             Ok(canceled) => *canceled,
             Err(payload) => panic::resume_unwind(payload),
         })
     }
 }
 
-impl<T: salsa::Database> CheckCanceled for T {
+impl<T: salsa::Database + panic::RefUnwindSafe> CheckCanceled for T {
     fn check_canceled(&self) {
         if self.salsa_runtime().is_current_revision_canceled() {
             Canceled::throw()
