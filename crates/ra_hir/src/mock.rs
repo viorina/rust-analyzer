@@ -26,6 +26,9 @@ pub struct MockDatabase {
     files: FxHashMap<String, FileId>,
 }
 
+unsafe impl Send for MockDatabase {}
+unsafe impl Sync for MockDatabase {}
+
 impl panic::RefUnwindSafe for MockDatabase {}
 
 impl MockDatabase {

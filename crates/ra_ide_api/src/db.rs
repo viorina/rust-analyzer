@@ -25,6 +25,9 @@ pub(crate) struct RootDatabase {
     pub(crate) last_gc_check: time::Instant,
 }
 
+unsafe impl Send for RootDatabase {}
+unsafe impl Sync for RootDatabase {}
+
 impl salsa::Database for RootDatabase {
     fn salsa_runtime(&self) -> &salsa::Runtime<RootDatabase> {
         &self.runtime
@@ -56,9 +59,9 @@ impl RootDatabase {
             last_gc: time::Instant::now(),
             last_gc_check: time::Instant::now(),
         };
-        db.set_crate_graph(Default::default());
-        db.set_local_roots(Default::default());
-        db.set_library_roots(Default::default());
+        db.set_constant_crate_graph(Default::default());
+        db.set_constant_local_roots(Default::default());
+        db.set_constant_library_roots(Default::default());
         let lru_capacity = lru_capacity.unwrap_or(ra_db::DEFAULT_LRU_CAP);
         db.query_mut(ra_db::ParseQuery).set_lru_capacity(lru_capacity);
         db.query_mut(hir::db::ParseMacroQuery).set_lru_capacity(lru_capacity);

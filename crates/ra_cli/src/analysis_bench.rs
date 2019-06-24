@@ -16,11 +16,11 @@ pub(crate) enum Op {
 pub(crate) fn run(verbose: bool, path: &Path, op: Op) -> Result<()> {
     let start = Instant::now();
     eprint!("loading: ");
-    let (host, roots) = ra_batch::load_cargo(path)?;
-    let db = host.raw_database();
+    let (mut host, roots) = ra_batch::load_cargo(path)?;
     eprintln!("{:?}\n", start.elapsed());
 
     let file_id = {
+        let db = host.raw_database();
         let path = match &op {
             Op::Highlight { path } => path,
             Op::Complete { path, .. } => path,
@@ -44,7 +44,7 @@ pub(crate) fn run(verbose: bool, path: &Path, op: Op) -> Result<()> {
 
     match op {
         Op::Highlight { .. } => {
-            let res = do_work(&host, |analysis| {
+            let res = do_work(&mut host, |analysis| {
                 analysis.diagnostics(file_id).unwrap();
                 analysis.highlight_as_html(file_id, false).unwrap()
             });
@@ -59,7 +59,7 @@ pub(crate) fn run(verbose: bool, path: &Path, op: Op) -> Result<()> {
                 .offset(LineCol { line, col_utf16: column });
             let file_postion = FilePosition { file_id, offset };
 
-            let res = do_work(&host, |analysis| analysis.completions(file_postion));
+            let res = do_work(&mut host, |analysis| analysis.completions(file_postion));
             if verbose {
                 println!("\n{:#?}", res);
             }
@@ -68,7 +68,7 @@ pub(crate) fn run(verbose: bool, path: &Path, op: Op) -> Result<()> {
     Ok(())
 }
 
-fn do_work<F: Fn(&Analysis) -> T, T>(host: &AnalysisHost, work: F) -> T {
+fn do_work<F: Fn(&Analysis) -> T, T>(host: &mut AnalysisHost, work: F) -> T {
     {
         let start = Instant::now();
         eprint!("from scratch:   ");
@@ -85,6 +85,19 @@ fn do_work<F: Fn(&Analysis) -> T, T>(host: &AnalysisHost, work: F) -> T {
         let start = Instant::now();
         eprint!("trivial change: ");
         host.raw_database().salsa_runtime().next_revision();
+        work(&host.analysis());
+        eprintln!("{:?}", start.elapsed());
+    }
+    {
+        let start = Instant::now();
+        eprint!("const change:   ");
+        {
+            let db = host.raw_database_mut();
+            let crate_graph: ra_db::CrateGraph = (&*db.crate_graph()).clone();
+            db.set_constant_crate_graph(Default::default());
+            db.set_constant_crate_graph(std::sync::Arc::new(crate_graph));
+        }
+
         let res = work(&host.analysis());
         eprintln!("{:?}", start.elapsed());
         res

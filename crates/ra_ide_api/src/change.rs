@@ -163,48 +163,73 @@ impl RootDatabase {
         if !change.new_roots.is_empty() {
             let mut local_roots = Vec::clone(&self.local_roots());
             for (root_id, is_local) in change.new_roots {
-                self.set_source_root(root_id, Default::default());
                 if is_local {
+                    self.set_source_root(root_id, Arc::new(SourceRoot::new()));
                     local_roots.push(root_id);
+                } else {
+                    self.set_constant_source_root(root_id, Arc::new(SourceRoot::new_durable()));
                 }
             }
-            self.set_local_roots(Arc::new(local_roots));
+            self.set_constant_local_roots(Arc::new(local_roots));
         }
 
         for (root_id, root_change) in change.roots_changed {
             self.apply_root_change(root_id, root_change);
         }
         for (file_id, text) in change.files_changed {
-            self.set_file_text(file_id, text)
+            if self.is_local(file_id) {
+                self.set_file_text(file_id, text)
+            } else {
+                self.set_constant_file_text(file_id, text)
+            }
         }
         if !change.libraries_added.is_empty() {
             let mut libraries = Vec::clone(&self.library_roots());
             for library in change.libraries_added {
                 libraries.push(library.root_id);
-                self.set_source_root(library.root_id, Default::default());
+                self.set_constant_source_root(library.root_id, Default::default());
                 self.set_constant_library_symbols(library.root_id, Arc::new(library.symbol_index));
                 self.apply_root_change(library.root_id, library.root_change);
             }
-            self.set_library_roots(Arc::new(libraries));
+            self.set_constant_library_roots(Arc::new(libraries));
         }
         if let Some(crate_graph) = change.crate_graph {
-            self.set_crate_graph(Arc::new(crate_graph))
+            self.set_constant_crate_graph(Arc::new(crate_graph))
         }
+    }
+
+    fn is_local(&self, file_id: FileId) -> bool {
+        let source_root_id = self.file_source_root(file_id);
+        !self.source_root(source_root_id).is_durable
     }
 
     fn apply_root_change(&mut self, root_id: SourceRootId, root_change: RootChange) {
         let mut source_root = SourceRoot::clone(&self.source_root(root_id));
         for add_file in root_change.added {
-            self.set_file_text(add_file.file_id, add_file.text);
-            self.set_file_relative_path(add_file.file_id, add_file.path.clone());
-            self.set_file_source_root(add_file.file_id, root_id);
+            if source_root.is_durable {
+                self.set_constant_file_text(add_file.file_id, add_file.text);
+                self.set_constant_file_relative_path(add_file.file_id, add_file.path.clone());
+                self.set_constant_file_source_root(add_file.file_id, root_id);
+            } else {
+                self.set_file_text(add_file.file_id, add_file.text);
+                self.set_file_relative_path(add_file.file_id, add_file.path.clone());
+                self.set_file_source_root(add_file.file_id, root_id);
+            }
             source_root.files.insert(add_file.path, add_file.file_id);
         }
         for remove_file in root_change.removed {
-            self.set_file_text(remove_file.file_id, Default::default());
+            if source_root.is_durable {
+                self.set_constant_file_text(remove_file.file_id, Default::default());
+            } else {
+                self.set_file_text(remove_file.file_id, Default::default());
+            }
             source_root.files.remove(&remove_file.path);
         }
-        self.set_source_root(root_id, Arc::new(source_root));
+        if source_root.is_durable {
+            self.set_constant_source_root(root_id, Arc::new(source_root));
+        } else {
+            self.set_source_root(root_id, Arc::new(source_root));
+        }
     }
 
     pub(crate) fn maybe_collect_garbage(&mut self) {

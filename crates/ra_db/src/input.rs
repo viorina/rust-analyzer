@@ -31,7 +31,17 @@ pub struct SourceRootId(pub u32);
 
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct SourceRoot {
+    pub is_durable: bool,
     pub files: FxHashMap<RelativePathBuf, FileId>,
+}
+
+impl SourceRoot {
+    pub fn new() -> SourceRoot {
+        SourceRoot::default()
+    }
+    pub fn new_durable() -> SourceRoot {
+        SourceRoot { is_durable: true, ..SourceRoot::default() }
+    }
 }
 
 /// `CrateGraph` is a bit of information which turns a set of text files into a
